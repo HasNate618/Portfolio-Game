@@ -47,7 +47,7 @@ public class Trail : MonoBehaviour
         Vector3 currentPosition = transform.position;
         Vector3 movementDelta = currentPosition - lastPosition;
         
-        Vector3 forwardMovement = -transform.forward * forwardSpeed * positionUpdateRate;
+        Vector3 forwardMovement = -transform.forward * forwardSpeed * positionUpdateRate * GameConfig.playerSpeedMultiplier;
         Vector3 newTrailPosition = currentPosition;
         
         trailPositions.Enqueue(newTrailPosition);

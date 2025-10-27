@@ -48,7 +48,7 @@ public class BackgroundManager : MonoBehaviour
         // Spawn background objects evenly spaced
         for (int i = 0; i < backgroundCount; i++)
         {
-            float zPos = resetZPosition - (i * spacing);
+            float zPos = resetZPosition - (i * spacing / GameConfig.playerSpeedMultiplier);
             Vector3 spawnPos = new Vector3(spawnOffset.x, spawnOffset.y, zPos);
             
             GameObject bgObj = Instantiate(backgroundPrefab, spawnPos, Quaternion.identity, transform);
@@ -73,7 +73,7 @@ public class BackgroundManager : MonoBehaviour
             
             // Move towards the front (use Vector3.back for negative Z movement)
             Vector3 moveDirection = moveSpeed > 0 ? Vector3.back : Vector3.forward;
-            bgObj.transform.position += moveDirection * Mathf.Abs(moveSpeed) * Time.deltaTime;
+            bgObj.transform.position += moveDirection * Mathf.Abs(moveSpeed) * Time.deltaTime * GameConfig.playerSpeedMultiplier;
             
             // Check if object has reached or passed the front position
             bool shouldReset = moveSpeed > 0 ? 

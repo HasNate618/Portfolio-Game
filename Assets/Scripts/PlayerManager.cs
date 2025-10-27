@@ -20,6 +20,12 @@ public class PlayerManager : MonoBehaviour
     [SerializeField]
     float yBounds = 3f;    // Y movement bounds from center
 
+    [Header("Mouse Follow Settings")]
+    [SerializeField]
+    Camera mainCamera;
+    [SerializeField]
+    float mouseSmoothness = 0.1f; // How smoothly to follow the cursor (lower = smoother)
+
     [Header("Health System")]
     [SerializeField]
     int maxHealth = 100;
@@ -34,39 +40,62 @@ public class PlayerManager : MonoBehaviour
     [SerializeField]
     float shootingInterval = 0.2f;
 
-    Vector2 moveInput;
     Vector2 velocity;
     float currentZRotation = 0f;
 
     float spawnTimer = 0f;
     int spawnIndex = 0;
+    Vector3 targetPosition;
 
     void Start()
     {
         // Initialize health
         currentHealth = maxHealth;
+        
+        // Get main camera if not assigned
+        if (mainCamera == null)
+        {
+            mainCamera = Camera.main;
+        }
+        
+        targetPosition = transform.position;
     }
 
     void Update()
     {
-        // Read WASD or arrow keys using the new Input System
-        moveInput = Keyboard.current != null ? new Vector2(
-            (Keyboard.current.dKey.isPressed ? 1 : 0) + (Keyboard.current.aKey.isPressed ? -1 : 0),
-            (Keyboard.current.wKey.isPressed ? 1 : 0) + (Keyboard.current.sKey.isPressed ? -1 : 0)
-        ).normalized : Vector2.zero;
+        // Get mouse position in world space
+        if (mainCamera != null && Mouse.current != null)
+        {
+            Vector2 mousePos = Mouse.current.position.ReadValue();
+            Vector3 worldMousePos = mainCamera.ScreenToWorldPoint(new Vector3(mousePos.x, mousePos.y, mainCamera.transform.position.z - transform.position.z));
+            
+            // Keep the same Z position
+            targetPosition = new Vector3(worldMousePos.x, worldMousePos.y, transform.position.z);
+            
+            // Clamp target position within bounds
+            targetPosition.x = Mathf.Clamp(targetPosition.x, -xBounds, xBounds);
+            targetPosition.y = Mathf.Clamp(targetPosition.y, -yBounds, yBounds);
+        }
 
         // Store old position for actual movement calculation
         Vector3 oldPosition = transform.position;
 
-        // Accelerate or decelerate velocity for smooth, responsive movement
-        if (moveInput.sqrMagnitude > 0.01f)
+        // Smoothly move towards mouse position
+        Vector3 direction = targetPosition - transform.position;
+        Vector2 targetVelocity = new Vector2(direction.x, direction.y) / mouseSmoothness;
+        
+        // Apply acceleration/deceleration
+        if (direction.sqrMagnitude > 0.01f)
         {
-            velocity = Vector2.MoveTowards(velocity, moveInput * moveSpeed, acceleration * Time.deltaTime);
+            velocity = Vector2.MoveTowards(velocity, targetVelocity, acceleration * Time.deltaTime);
         }
         else
         {
             velocity = Vector2.MoveTowards(velocity, Vector2.zero, deceleration * Time.deltaTime);
         }
+
+        // Limit velocity to max speed
+        velocity = Vector2.ClampMagnitude(velocity, moveSpeed);
 
         Vector3 move = new Vector3(velocity.x, velocity.y, 0f) * Time.deltaTime;
         Vector3 newPosition = transform.position + move;
@@ -95,8 +124,8 @@ public class PlayerManager : MonoBehaviour
         currentZRotation = Mathf.LerpAngle(currentZRotation, targetZ, Time.deltaTime * swaySmooth);
         transform.rotation = Quaternion.Euler(0f, 0f, currentZRotation);
 
-        // Alternating spawn logic (now supports an array of spawn points)
-        if (Keyboard.current != null && Keyboard.current.spaceKey.isPressed && projectilePrefab != null && spawnPoints != null && spawnPoints.Length > 0)
+        // Shoot on left mouse button hold
+        if (Mouse.current != null && Mouse.current.leftButton.isPressed && projectilePrefab != null && spawnPoints != null && spawnPoints.Length > 0)
         {
             spawnTimer -= Time.deltaTime;
             if (spawnTimer <= 0f)

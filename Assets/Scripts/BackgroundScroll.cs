@@ -22,7 +22,7 @@ public class Background : MonoBehaviour
     {
         if (mat != null)
         {
-            offsetY += scrollSpeed * Time.deltaTime;
+            offsetY += scrollSpeed * Time.deltaTime * GameConfig.playerSpeedMultiplier;
             Vector2 offset = mat.mainTextureOffset;
             offset.y = offsetY;
             mat.mainTextureOffset = offset;
