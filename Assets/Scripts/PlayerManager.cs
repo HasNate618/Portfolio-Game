@@ -3,159 +3,149 @@ using UnityEngine.InputSystem;
 
 public class PlayerManager : MonoBehaviour
 {
-    [SerializeField]
-    float moveSpeed = 5f;
-    [SerializeField]
-    float acceleration = 20f;
-    [SerializeField]
-    float deceleration = 25f;
-    [SerializeField]
-    float maxSwayAngle = 20f; // Maximum rotation angle for sway
-    [SerializeField]
-    float swaySmooth = 8f;    // How quickly the rotation interpolates
-
-    [Header("Movement Bounds")]
-    [SerializeField]
-    float xBounds = 5.5f;  // X movement bounds from center
-    [SerializeField]
-    float yBounds = 3f;    // Y movement bounds from center
-
     [Header("Mouse Follow Settings")]
-    [SerializeField]
-    Camera mainCamera;
-    [SerializeField]
-    float mouseSmoothness = 0.1f; // How smoothly to follow the cursor (lower = smoother)
-
+    [SerializeField] Camera mainCamera;
+    [SerializeField] float followSpeed = 10f; // How fast the player follows the cursor (higher = more responsive)
+    [SerializeField] [Range(0f, 1f)] float smoothing = 0.15f; // Smoothing factor (0 = instant, 1 = very smooth)
+    [SerializeField] bool useAbsolutePosition = false; // If true, player moves directly to cursor; if false, uses smooth interpolation
+    
+    [Header("Movement Bounds")]
+    [SerializeField] float xBounds = 5.5f;
+    [SerializeField] float yBounds = 3f;
+    
+    [Header("Visual Feedback")]
+    [SerializeField] float maxSwayAngle = 20f;
+    [SerializeField] float swaySpeed = 8f;
+    
     [Header("Health System")]
-    [SerializeField]
-    int maxHealth = 100;
-    [SerializeField]
-    int currentHealth;
+    [SerializeField] int maxHealth = 100;
+    [SerializeField] int currentHealth;
 
     [Header("Shooting")]
-    [SerializeField]
-    Transform[] spawnPoints; // Assign 4 transforms in the inspector
-    [SerializeField]
-    GameObject projectilePrefab;
-    [SerializeField]
-    float shootingInterval = 0.2f;
+    [SerializeField] Transform[] spawnPoints;
+    [SerializeField] GameObject projectilePrefab;
+    [SerializeField] float shootingInterval = 0.2f;
 
-    Vector2 velocity;
-    float currentZRotation = 0f;
-
-    float spawnTimer = 0f;
-    int spawnIndex = 0;
-    Vector3 targetPosition;
+    // Private variables
+    private Vector3 currentVelocity; // For SmoothDamp
+    private Vector3 mouseWorldPosition;
+    private float currentZRotation;
+    private float spawnTimer;
+    private int spawnIndex;
 
     void Start()
     {
-        // Initialize health
         currentHealth = maxHealth;
         
-        // Get main camera if not assigned
         if (mainCamera == null)
         {
             mainCamera = Camera.main;
         }
         
-        targetPosition = transform.position;
+        mouseWorldPosition = transform.position;
+        spawnTimer = 0f;
     }
 
     void Update()
     {
-        // Get mouse position in world space
-        if (mainCamera != null && Mouse.current != null)
-        {
-            Vector2 mousePos = Mouse.current.position.ReadValue();
-            Vector3 worldMousePos = mainCamera.ScreenToWorldPoint(new Vector3(mousePos.x, mousePos.y, mainCamera.transform.position.z - transform.position.z));
-            
-            // Keep the same Z position
-            targetPosition = new Vector3(worldMousePos.x, worldMousePos.y, transform.position.z);
-            
-            // Clamp target position within bounds
-            targetPosition.x = Mathf.Clamp(targetPosition.x, -xBounds, xBounds);
-            targetPosition.y = Mathf.Clamp(targetPosition.y, -yBounds, yBounds);
-        }
+        UpdateMousePosition();
+        UpdatePlayerMovement();
+        UpdateRotationSway();
+        HandleShooting();
+    }
 
-        // Store old position for actual movement calculation
-        Vector3 oldPosition = transform.position;
+    void UpdateMousePosition()
+    {
+        if (mainCamera == null || Mouse.current == null) return;
 
-        // Smoothly move towards mouse position
-        Vector3 direction = targetPosition - transform.position;
-        Vector2 targetVelocity = new Vector2(direction.x, direction.y) / mouseSmoothness;
+        // Get mouse screen position
+        Vector2 mouseScreenPos = Mouse.current.position.ReadValue();
         
-        // Apply acceleration/deceleration
-        if (direction.sqrMagnitude > 0.01f)
+        // Convert to world position on the player's Z plane
+        Vector3 mouseWorldPos3D = mainCamera.ScreenToWorldPoint(new Vector3(
+            mouseScreenPos.x,
+            mouseScreenPos.y,
+            Mathf.Abs(mainCamera.transform.position.z - transform.position.z)
+        ));
+        
+        // Store as target position with clamped bounds
+        mouseWorldPosition = new Vector3(
+            Mathf.Clamp(mouseWorldPos3D.x, -xBounds, xBounds),
+            Mathf.Clamp(mouseWorldPos3D.y, -yBounds, yBounds),
+            transform.position.z
+        );
+    }
+
+    void UpdatePlayerMovement()
+    {
+        Vector3 targetPosition = mouseWorldPosition;
+        Vector3 newPosition;
+
+        if (useAbsolutePosition)
         {
-            velocity = Vector2.MoveTowards(velocity, targetVelocity, acceleration * Time.deltaTime);
+            // Direct movement with lerp
+            newPosition = Vector3.Lerp(transform.position, targetPosition, followSpeed * Time.deltaTime);
         }
         else
         {
-            velocity = Vector2.MoveTowards(velocity, Vector2.zero, deceleration * Time.deltaTime);
+            // Smooth damped movement (more natural feel)
+            newPosition = Vector3.SmoothDamp(
+                transform.position,
+                targetPosition,
+                ref currentVelocity,
+                smoothing,
+                followSpeed
+            );
         }
 
-        // Limit velocity to max speed
-        velocity = Vector2.ClampMagnitude(velocity, moveSpeed);
+        // Apply final clamped position
+        transform.position = new Vector3(
+            Mathf.Clamp(newPosition.x, -xBounds, xBounds),
+            Mathf.Clamp(newPosition.y, -yBounds, yBounds),
+            transform.position.z
+        );
+    }
 
-        Vector3 move = new Vector3(velocity.x, velocity.y, 0f) * Time.deltaTime;
-        Vector3 newPosition = transform.position + move;
+    void UpdateRotationSway()
+    {
+        // Calculate sway based on horizontal velocity
+        float horizontalVelocity = currentVelocity.x;
+        float targetRotation = -horizontalVelocity * maxSwayAngle;
         
-        // Check bounds and clamp velocity if hitting bounds
-        if (newPosition.x < -xBounds || newPosition.x > xBounds)
-        {
-            velocity.x = 0f; // Stop X velocity when hitting X bounds
-            newPosition.x = Mathf.Clamp(newPosition.x, -xBounds, xBounds);
-        }
-        
-        if (newPosition.y < -yBounds || newPosition.y > yBounds)
-        {
-            velocity.y = 0f; // Stop Y velocity when hitting Y bounds
-            newPosition.y = Mathf.Clamp(newPosition.y, -yBounds, yBounds);
-        }
-        
-        transform.position = newPosition;
-
-        // Calculate actual movement delta for sway (not internal velocity)
-        Vector3 actualMovement = transform.position - oldPosition;
-        float actualXVelocity = actualMovement.x / Time.deltaTime;
-
-        // Rotational sway based on actual horizontal movement
-        float targetZ = -actualXVelocity / moveSpeed * maxSwayAngle;
-        currentZRotation = Mathf.LerpAngle(currentZRotation, targetZ, Time.deltaTime * swaySmooth);
+        currentZRotation = Mathf.LerpAngle(currentZRotation, targetRotation, swaySpeed * Time.deltaTime);
         transform.rotation = Quaternion.Euler(0f, 0f, currentZRotation);
+    }
 
-        // Shoot on left mouse button hold
-        if (Mouse.current != null && Mouse.current.leftButton.isPressed && projectilePrefab != null && spawnPoints != null && spawnPoints.Length > 0)
-        {
-            spawnTimer -= Time.deltaTime;
-            if (spawnTimer <= 0f)
-            {
-                // Wrap index to available spawn points
-                Transform spawnPoint = spawnPoints[spawnIndex % spawnPoints.Length];
-                if (spawnPoint != null)
-                {
-                    Instantiate(projectilePrefab, spawnPoint.position, spawnPoint.rotation);
-                }
-
-                spawnIndex = (spawnIndex + 1) % spawnPoints.Length;
-                spawnTimer = shootingInterval;
-            }
-        }
-        else
+    void HandleShooting()
+    {
+        if (Mouse.current == null || !Mouse.current.leftButton.isPressed || projectilePrefab == null || spawnPoints == null || spawnPoints.Length == 0)
         {
             spawnTimer = 0f;
+            return;
+        }
+
+        spawnTimer -= Time.deltaTime;
+        
+        if (spawnTimer <= 0f)
+        {
+            Transform spawnPoint = spawnPoints[spawnIndex % spawnPoints.Length];
+            
+            if (spawnPoint != null)
+            {
+                Instantiate(projectilePrefab, spawnPoint.position, spawnPoint.rotation);
+            }
+
+            spawnIndex = (spawnIndex + 1) % spawnPoints.Length;
+            spawnTimer = shootingInterval;
         }
     }
 
     void OnTriggerEnter(Collider other)
     {
-        // Check for enemy projectile collision
         if (other.CompareTag("EnemyProjectile"))
         {
-            // Try to get damage from the projectile
-            int damage = 1; // Default damage
+            int damage = 1;
 
-            // Check if projectile has a damage component or field
             EnemyProjectile enemyProj = other.GetComponent<EnemyProjectile>();
             if (enemyProj != null)
             {
@@ -170,7 +160,7 @@ public class PlayerManager : MonoBehaviour
     public void TakeDamage(int damage)
     {
         currentHealth -= damage;
-        currentHealth = Mathf.Max(0, currentHealth); // Ensure health doesn't go negative
+        currentHealth = Mathf.Max(0, currentHealth);
 
         Debug.Log($"Player took {damage} damage! Health: {currentHealth}/{maxHealth}");
 
@@ -183,19 +173,15 @@ public class PlayerManager : MonoBehaviour
     void Die()
     {
         Debug.Log("Player died!");
-        // Add death logic here (restart level, show game over screen, etc.)
-        
-        // For now, just reset health (you can modify this behavior)
         currentHealth = maxHealth;
     }
 
-    // Public methods for external access
+    // Public API
     public int GetCurrentHealth() => currentHealth;
     public int GetMaxHealth() => maxHealth;
     public float GetHealthPercentage() => (float)currentHealth / maxHealth;
 }
 
-// Simple component for enemy projectiles to specify damage
 [System.Serializable]
 public class EnemyProjectile : MonoBehaviour
 {

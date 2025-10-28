@@ -17,6 +17,7 @@ public class Projectile : MonoBehaviour
     {
         transform.position += transform.forward * speed * Time.deltaTime;
     }
+
     void OnDestroy()
     {
         // Play effect if destroyed before lifetime
@@ -25,19 +26,25 @@ public class Projectile : MonoBehaviour
             PlayChildParticleEffect();
         }
     }
+
     void PlayChildParticleEffect()
     {
         ParticleSystem childParticles = GetComponentInChildren<ParticleSystem>();
         if (childParticles != null)
         {
+            // Detach from parent so it persists after projectile is destroyed
             childParticles.transform.SetParent(null);
-            //childParticles.transform.position = transform.position;
+            childParticles.transform.position = transform.position;
+
+            // Play the particle system
             childParticles.Play();
-/*            var main = childParticles.main;
-            if (!main.loop)
-            {
-                Destroy(childParticles.gameObject, main.duration + main.startLifetime.constantMax);
-            }*/
+
+            // Calculate total duration and destroy after it finishes
+            var main = childParticles.main;
+            float totalDuration = main.duration + main.startLifetime.constantMax;
+
+            // Destroy the particle system after it finishes playing
+            Destroy(childParticles.gameObject, totalDuration);
         }
     }
 }
