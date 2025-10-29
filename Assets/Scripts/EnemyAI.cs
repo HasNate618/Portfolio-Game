@@ -117,6 +117,8 @@ public class SingleShotAttack : IAttackBehavior
             if (rb != null)
                 rb.linearVelocity = shootDirection * 10f;
         }
+
+        AudioManager.Instance.PlayEnemyShoot();
     }
 }
 
@@ -141,7 +143,7 @@ public class BurstFireAttack : IAttackBehavior
         if (mb != null)
             mb.StartCoroutine(BurstCoroutine(firePoint, projectilePrefab));
     }
-    
+
     private IEnumerator BurstCoroutine(Transform firePoint, GameObject projectilePrefab)
     {
         for (int i = 0; i < burstCount; i++)
@@ -156,7 +158,9 @@ public class BurstFireAttack : IAttackBehavior
                 if (rb != null)
                     rb.linearVelocity = shootDirection * 10f;
             }
-            
+
+            AudioManager.Instance.PlayEnemyShoot();
+
             if (i < burstCount - 1)
                 yield return new WaitForSeconds(burstDelay);
         }

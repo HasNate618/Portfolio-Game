@@ -202,6 +202,7 @@ public class EnemyManager : MonoBehaviour
     public void RegisterEnemyDestroyed(GameObject enemy)
     {
         currentEnemies.Remove(enemy);
+        AudioManager.Instance.PlayExplosion();
     }
     
     public int GetCurrentWaveIndex() => currentWaveIndex;

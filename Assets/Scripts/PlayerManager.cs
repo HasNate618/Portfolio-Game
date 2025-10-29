@@ -32,6 +32,7 @@ public class PlayerManager : MonoBehaviour
     private float currentZRotation;
     private float spawnTimer;
     private int spawnIndex;
+    private ParticleSystem[] cachedSpawnPointParticles; // Cached particle systems for spawn points
 
     void Start()
     {
@@ -44,6 +45,28 @@ public class PlayerManager : MonoBehaviour
         
         mouseWorldPosition = transform.position;
         spawnTimer = 0f;
+        
+        // Cache particle systems from spawn points
+        CacheSpawnPointParticles();
+    }
+
+    void CacheSpawnPointParticles()
+    {
+        if (spawnPoints == null || spawnPoints.Length == 0)
+        {
+            cachedSpawnPointParticles = new ParticleSystem[0];
+            return;
+        }
+
+        cachedSpawnPointParticles = new ParticleSystem[spawnPoints.Length];
+
+        for (int i = 0; i < spawnPoints.Length; i++)
+        {
+            if (spawnPoints[i] != null)
+            {
+                cachedSpawnPointParticles[i] = spawnPoints[i].GetComponent<ParticleSystem>();
+            }
+        }
     }
 
     void Update()
@@ -128,15 +151,41 @@ public class PlayerManager : MonoBehaviour
         
         if (spawnTimer <= 0f)
         {
-            Transform spawnPoint = spawnPoints[spawnIndex % spawnPoints.Length];
+            int currentSpawnIndex = spawnIndex % spawnPoints.Length;
+            Transform spawnPoint = spawnPoints[currentSpawnIndex];
             
             if (spawnPoint != null)
             {
+                // Instantiate the projectile
                 Instantiate(projectilePrefab, spawnPoint.position, spawnPoint.rotation);
+                
+                // Play particle effect at the spawn point using cached particle system
+                PlaySpawnPointEffect(currentSpawnIndex);
+                
+                // Play shoot sound effect
+                if (AudioManager.Instance != null)
+                {
+                    AudioManager.Instance.PlayPlayerShoot();
+                }
             }
 
             spawnIndex = (spawnIndex + 1) % spawnPoints.Length;
             spawnTimer = shootingInterval;
+        }
+    }
+
+    void PlaySpawnPointEffect(int spawnPointIndex)
+    {
+        // Use cached particle system instead of doing GetComponent every time
+        if (spawnPointIndex >= 0 && spawnPointIndex < cachedSpawnPointParticles.Length)
+        {
+            ParticleSystem particleSystem = cachedSpawnPointParticles[spawnPointIndex];
+            
+            if (particleSystem != null)
+            {
+                // Play the particle effect
+                particleSystem.Play();
+            }
         }
     }
 
@@ -163,6 +212,8 @@ public class PlayerManager : MonoBehaviour
         currentHealth = Mathf.Max(0, currentHealth);
 
         Debug.Log($"Player took {damage} damage! Health: {currentHealth}/{maxHealth}");
+
+        AudioManager.Instance.PlayPlayerHit();
 
         if (currentHealth <= 0)
         {
